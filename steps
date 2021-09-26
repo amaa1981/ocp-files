@@ -1,0 +1,30 @@
+Customizing Image - Step by Step
+
+There are two files attached - isolinux.cfg and grub.cfg, you will have to copy it to bastion host on /root 
+
+Steps:
+
+yum install genisoimage 
+
+PS: You need to attach the exiting ISO to bastion Virtual Machine, once it is done, run the command. 
+
+mkdir /mnt/coreos
+mount /dev/cdrom /mnt/coreos
+mkdir -p /root/clusterA-customized
+cp -r /mnt/coreos/* /root/clusterA-customized
+umout /mnt/coreos 
+
+The next steps are the most important, please make sure to copy the files to the right path.
+
+cp /root/isolinux.cfg /root/clusterA-customized/isolinux/isolinux.cfg
+cp /root/grub.cfg /root/clusterA-customized/EFI/redhat/grub.cfg 
+
+Please, Double check if the files are the same as the ones Attached to this email.
+
+After you copy the files please run the cmd below:
+
+cd /root/clusterA-customized
+/usr/bin/mkisofs -U -A 'RHCOS-CustomIso' -V 'RHCOS-CustomIso' -volset 'RHCOS-CustomIso' -J -joliet-long -r -v -T -x ./lost+found -o /root/iso/rhcos-install-clusterA.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e images/efiboot.img -no-emul-boot .
+
+
+The new ISO image will be generated on the location: /root/iso/rhcos-install-clusterA.iso, make sure to boot up all the openshift nodes using this image. 
