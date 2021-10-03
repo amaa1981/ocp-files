@@ -22,7 +22,7 @@ systemctl enable --now mirror-registry
 
 
 Confirm that the registry is available:
-curl -u admin:<Password> -k https://dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/v2/_catalog
+curl -u admin:<Password> -k https://util.ocp4.doitall.local:5000/v2/_catalog
 
 Creating Pull Secrets
 Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
