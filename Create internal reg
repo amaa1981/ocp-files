@@ -1,0 +1,39 @@
+#Generate a username and a password for your registry that uses the bcrpt format:
+htpasswd -Bc /registry/auth/htpasswd admin
+
+Install and Start Local Registry Server
+podman pull quay.io/redhat-emea-ssa-team/registry:2
+ 
+/usr/bin/podman run -d --name mirror-registry --net host -v /registry/data:/var/lib/registry:z -v /registry/auth:/auth:z -e "REGISTRY_AUTH=htpasswd" -e "REGISTRY_AUTH_HTPASSWD_REALM=registry-realm" -e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" -v /registry/certs:/certs:z -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key quay.io/redhat-emea-ssa-team/registry:2
+
+podman generate systemd --name mirror-registry > /etc/systemd/system/mirror-registry.service
+
+systemctl enable --now mirror-registry
+
+
+Confirm that the registry is available:
+curl -u admin:<Password> -k https://dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/v2/_catalog
+
+Creating Pull Secrets
+Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
+Pull Secret Bundle
+podman login --authfile /root/mirror-registry-pullsecret.json \
+"dc2xcehaps001.cclu.sabiccorp.sabic.com:5000"
+
+/jq -s '{"auths": ( .[0].auths + .[1].auths ) }' /root/mirror-registry-pullsecret.json /root/pullsecret.txt > bundle-pullsecret.txt
+
+Download OpenShift Artifacts
+mkdir /root/iso
+wget https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.6/latest/rhcos-4.6.40-x86_64-live.x86_64.iso -O /root/iso/rhcos-4.6.40-x86_64-live.x86_64.iso
+
+wget https://mirror.openshift.com/pub/openshift-v4/amd64/clients/ocp/latest-4.6/openshift-client-linux.tar.gz -O /root/openshift-client-linux.tar.gz
+
+
+tar xzvf /root/openshift-client-linux.tar.gz -C /usr/local/bin
+
+Synchronizing the OpenShift Platform Container Images
+
+SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
+
+oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4 --to-release-image=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4:4.6.42-x86_64
+
