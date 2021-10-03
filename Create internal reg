@@ -28,7 +28,7 @@ Creating Pull Secrets
 Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
 Pull Secret Bundle
 podman login --authfile /root/mirror-registry-pullsecret.json \
-"dc2xcehaps001.cclu.sabiccorp.sabic.com:5000"
+"util.ocp4.doitall.local:5000"
 
 /jq -s '{"auths": ( .[0].auths + .[1].auths ) }' /root/mirror-registry-pullsecret.json /root/pullsecret.txt > bundle-pullsecret.txt
 
@@ -43,7 +43,7 @@ tar xzvf /root/openshift-client-linux.tar.gz -C /usr/local/bin
 
 Synchronizing the OpenShift Platform Container Images
 
-SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
+Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
 
-oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4 --to-release-image=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4:4.6.42-x86_64
+oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=util.ocp4.doitall.local:5000/ocp4/openshift4 --to-release-image=util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64
 
