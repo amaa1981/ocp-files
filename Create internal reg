@@ -1,3 +1,13 @@
+mkdir -p /registry/{auth,certs,data}
+
+openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=util.ocp4.doitall.local" -out /registry/certs/domain.crt
+
+
+Add the certificate to your list of trusted certificates:
+cp -rf /registry/certs/domain.crt /etc/pki/ca-trust/source/anchors/
+update-ca-trust
+
+
 #Generate a username and a password for your registry that uses the bcrpt format:
 htpasswd -Bc /registry/auth/htpasswd admin
 
