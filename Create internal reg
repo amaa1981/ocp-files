@@ -1,14 +1,36 @@
+Step by Step
+Bastion Host
+Install packages on Bastion Host
+
+yum -y install podman wget genisoimage bind-utils jq rsync httpd
+
+Configure Web Server
+
+Apache HTTP Server will serve Ignition Files and OCP Artifacts during the Installation process.
+sed -i -e 's/Listen 80.*/Listen 8080/g' /etc/httpd/conf/httpd.conf
+mkdir /var/www/html/ocp4
+chmod a+r /var/www/html
+systemctl enable --now httpd
+systemctl status httpd
+
+Image Registry Installation
+In a restricted network installation, you can download the images that are required to install a cluster, place them in a mirror registry, and use that data to install your cluster.
+
+SABIC requested to have a single Container image Registry, a firewall rule must be created to allow connections from all the nodes from ClusterB to dc2xcehaps001.cclu.sabiccorp.sabic.com on port 5000/tcp.
+
+Make sure that the Bastion Host has an fqdn.
 mkdir -p /registry/{auth,certs,data}
 
-openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=util.ocp4.doitall.local" -out /registry/certs/domain.crt
+openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=dc2xcehaps001.cclu.sabiccorp.sabic.com" -out /registry/certs/domain.crt
 
 
 Add the certificate to your list of trusted certificates:
 cp -rf /registry/certs/domain.crt /etc/pki/ca-trust/source/anchors/
 update-ca-trust
 
+Local Registry Username and Password
 
-#Generate a username and a password for your registry that uses the bcrpt format:
+Generate a username and a password for your registry that uses the bcrpt format:
 htpasswd -Bc /registry/auth/htpasswd admin
 
 Install and Start Local Registry Server
@@ -22,13 +44,13 @@ systemctl enable --now mirror-registry
 
 
 Confirm that the registry is available:
-curl -u admin:<Password> -k https://util.ocp4.doitall.local:5000/v2/_catalog
+curl -u admin:<Password> -k https://dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/v2/_catalog
 
 Creating Pull Secrets
 Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
 Pull Secret Bundle
 podman login --authfile /root/mirror-registry-pullsecret.json \
-"util.ocp4.doitall.local:5000"
+"dc2xcehaps001.cclu.sabiccorp.sabic.com:5000"
 
 /jq -s '{"auths": ( .[0].auths + .[1].auths ) }' /root/mirror-registry-pullsecret.json /root/pullsecret.txt > bundle-pullsecret.txt
 
@@ -43,7 +65,318 @@ tar xzvf /root/openshift-client-linux.tar.gz -C /usr/local/bin
 
 Synchronizing the OpenShift Platform Container Images
 
-Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
+SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
 
-oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=util.ocp4.doitall.local:5000/ocp4/openshift4 --to-release-image=util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64
+oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4 --to-release-image=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4:4.6.42-x86_64
+
+Synchronizing Operators (Step to be Done After Cluster Installation)
+
+SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
+
+Please follow the official documentation
+Configuring the Load Balancers
+yum install haproxy
+setsebool -P haproxy_connect_any on
+
+
+We now need to configure it via /etc/haproxy/haproxy.cfg
+
+haproxy.cfg 
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          300s
+    timeout server          300s
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 20000
+ 
+frontend openshift-api-server
+    bind *:6443
+    default_backend openshift-api-server
+    mode tcp
+    option tcplog
+ 
+backend openshift-api-server
+    balance source
+    mode tcp
+    server bootstrap <BOOTSTRAP IP>:6443 check
+    server master001 <MASTER 1 IP>:6443 check
+    server master002 <MASTER 2 IP>:6443 check
+    server master003 <MASTER 3 IP>:6443 check
+ 
+frontend machine-config-server
+    bind *:22623
+    default_backend machine-config-server
+    mode tcp
+    option tcplog
+
+
+backend machine-config-server
+    balance source
+    mode tcp
+    server bootstrap <BOOTSTRAP IP>:22623 check
+    server master001 <MASTER 1 IP>:22623 check
+    server master002 <MASTER 2 IP>:22623 check
+    server master003 <MASTER 3 IP>:22623 check
+
+frontend ingress-http
+    bind *:80
+    default_backend ingress-http
+    mode tcp
+    option tcplog
+ 
+backend ingress-http
+    balance source
+    mode tcp
+    server worker001 <WORKER 1 IP>:80 check
+    server worker002 <WORKER 2 IP>:80 check
+    server worker003 <WORKER 3 IP>:80 check
+
+frontend ingress-https
+    bind *:443
+    default_backend ingress-https
+    mode tcp
+    option tcplog
+ 
+backend ingress-https
+    balance source
+    mode tcp
+    server worker001 <WORKER 1 IP>:443 check
+    server worker002 <WORKER 2 IP>:443 check
+    server worker003 <WORKER 3 IP>:443 check
+
+
+
+
+We can now start the haproxy service.
+systemctl enable --now haproxy
+
+
+
+Creating install-config.yml file
+
+ssh-keygen
+ 
+export PULL_SECRET=$(cat /root/bundle-pullsecret.txt | jq -c)
+export SSH_KEY=$(cat $HOME/.ssh/id_rsa.pub)
+export CERTIFICATE=$(cat /registry/certs/domain.crt | sed -e 's/^/     /')
+export CLUSTER_NAME=<CLUSTER NAME>
+
+cat > /root/install-config.yaml << EOF
+apiVersion: v1
+baseDomain: sabiccorp.sabic.com
+compute: 
+- name: worker
+  replicas: 3
+controlPlane:
+  name: master
+  replicas: 3
+metadata:
+  name: ${CLUSTER_NAME}
+networking:
+  clusterNetworks:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  networkType: OpenShiftSDN
+  serviceNetwork:
+  - 172.30.0.0/16
+platform:
+  none: {}
+pullSecret: |
+  ${PULL_SECRET}
+sshKey: |
+  ${SSH_KEY}
+imageContentSources:
+- mirrors:
+  - dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4
+  source: quay.io/openshift-release-dev/ocp-release
+- mirrors:
+  - dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4
+  source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+additionalTrustBundle: |
+${CERTIFICATE}
+EOF
+
+
+
+
+Generating and Publishing ignition files
+oc adm release extract -a /root/bundle-pullsecret.txt --command=openshift-install "dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4:4.6.42-x86_64"
+mv ./openshift-install /usr/local/bin/
+openshift-install version 
+
+mkdir ocp4
+cp -rf install-config.yaml ocp4/install-config.yaml
+openshift-install create ignition-configs --dir=ocp4
+cp -rf ocp4/*.ign /var/www/html/ocp4/
+chmod -R a+rx /var/www/html/
+
+Customizing RHCOS ISO Image
+Let's mount the iso and extract out the content. On a Linux shell.
+
+NOTE: Replace X ( In Red ) with the name or any unique identifier of the cluster. 
+E.g: clusterA or clusterB
+
+Mounting and copying the iso content
+mkdir /mnt/iso
+mkdir -p /root/clusterX-customized
+mount -o /root/iso/rhcos-4.6.40-x86_64-live.x86_64.iso /mnt/iso
+cp -r /mnt/iso/* /root/clusterX-customized
+umount /mnt/iso/
+
+
+The files for Cluster A were sent by email - isolinux.cfg and grub.cfg, you will have to copy it to bastion host on /root 
+
+Copying the customized files into the clusterX-customized folder.
+cp /root/isolinux.cfg /root/clusterX-customized/isolinux/isolinux.cfg
+cp /root/grub.cfg /root/clusterX-customized/EFI/redhat/grub.cfg
+
+
+Re-pack Iso image
+After updating the isolinux.cfg and grub.cfg files, re-pack the ISO image..
+cd /root/clusterX-customized
+/usr/bin/mkisofs -U -A 'RHCOS-CustomIso' -V 'RHCOS-CustomIso' -volset 'RHCOS-CustomIso' -J -joliet-long -r -v -T -x ./lost+found -o /root/rhcos-install-clusterX.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e images/efiboot.img -no-emul-boot .
+
+
+NOTE: The custom image location is: /root/rhcos-install-clusterX.iso
+Installing the clusters
+Before you install a cluster on bare metal infrastructure that you provision, you must create RHCOS machines for it to use. Use an ISO image for booting to create the machines.
+
+To create the OpenShift Container Platform cluster, you wait for the bootstrap process to complete on the machines that you provisioned by using the Ignition config files that you generated with the installation program.
+
+Monitor the bootstrap process:
+openshift-install --dir=ocp4 wait-for bootstrap-complete --log-level=info
+
+ 
+The command succeeds when the Kubernetes API server signals that it has been bootstrapped on the control plane machines.
+
+
+You must remove the bootstrap machine from the load balancer at this point. You can also remove or reformat the machine itself.
+
+Monitor the Cluster process:
+openshift-install --dir=ocp4 wait-for install-complete --log-level=info
+
+
+Once the installation is finished you can log in to your cluster as a default system user by exporting the cluster kubeconfig file. The kubeconfig file contains information about the cluster that is used by the CLI to connect a client to the correct cluster and API server. The file is specific to a cluster and is created during OpenShift Container Platform installation.
+export KUBECONFIG=/root/ocp4/auth/kubeconfig
+
+
+Once you finished the ClusterA repeat the same steps for ClusterB
+Configuring OpenShift Image Registry Storage
+
+NOTE: OpenShift Container Storage needs to be deployed first and follow the official documentation.
+
+Configuring Identity Provider - Local Users
+To use the HTPasswd identity provider, you must generate a flat file that contains the usernames and passwords for your cluster by using htpasswd.
+
+For more in detail: https://docs.openshift.com/container-platform/4.5/authentication/identity_providers/configuring-htpasswd-identity-provider.html#identity-provider-creating-htpasswd-file-linux_configuring-htpasswd-identity-provider
+
+Create or update your flat file with a username and hashed password:
+htpasswd -c -B -b /root/htpasswd.txt  admin <password>
+
+
+Continue to add or update credentials to the file:
+
+htpasswd -B -b /root/htpasswd.txt <user_name> <password>
+
+
+Creating the HTPasswd Secret
+
+oc create secret generic htpass-secret --from-file=htpasswd=/root/htpasswd.txt -n openshift-config
+
+
+To update HTPasswd Secret
+
+oc create secret generic htpass-secret --from-file=htpasswd=/root/htpasswd.txt -n openshift-config --dry-run=client -o yaml | oc replace -f -
+
+
+Adding an identity provider to your clusters
+cat > htpasswd.yaml  << EOF
+apiVersion: config.openshift.io/v1
+kind: OAuth
+metadata:
+  name: cluster
+spec:
+  identityProviders:
+  - name: Local Users 
+    mappingMethod: claim 
+    type: HTPasswd
+    htpasswd:
+      fileData:
+        name: htpass-secret
+EOF
+
+oc apply –f htpasswd.yaml
+
+
+Assign admin cluster role to the admin user
+oc adm policy add-cluster-role-to-user cluster-admin admin
+
+
+Try to log in using the web console with the admin user.
+Configuring NTP using Machine config
+chronybase64=$(cat << EOF | base64 -w 0
+server 10.32.43.25
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+keyfile /etc/chrony.keys
+leapsectz right/UTC
+logdir /var/log/chrony
+EOF
+)
+
+cat << EOF > 50-worker-chrony.yaml
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: worker
+  name: 50-worker-chrony
+spec:
+  config:
+    ignition:
+      version: 3.1.0
+    storage:
+      files:
+      - contents:
+          source: data:text/plain;charset=utf-8;base64,${chronybase64}
+        filesystem: root
+        mode: 0644
+        path: /etc/chrony.conf
+EOF
+
+cat << EOF > 50-master-chrony.yaml
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: master
+  name: 50-master-chrony
+spec:
+  config:
+    ignition:
+      version: 3.1.0
+    storage:
+      files:
+      - contents:
+          source: data:text/plain;charset=utf-8;base64,${chronybase64}
+        filesystem: root
+        mode: 0644
+        path: /etc/chrony.conf
+EOF
+
+oc apply -f 50-worker-chrony.yaml
+oc apply -f 50-master-chrony.yaml
+
+
 
