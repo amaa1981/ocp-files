@@ -16,12 +16,12 @@ systemctl status httpd
 Image Registry Installation
 In a restricted network installation, you can download the images that are required to install a cluster, place them in a mirror registry, and use that data to install your cluster.
 
-SABIC requested to have a single Container image Registry, a firewall rule must be created to allow connections from all the nodes from ClusterB to dc2xcehaps001.cclu.sabiccorp.sabic.com on port 5000/tcp.
+SABIC requested to have a single Container image Registry, a firewall rule must be created to allow connections from all the nodes from ClusterB to util.ocp4.doitall.local on port 5000/tcp.
 
 Make sure that the Bastion Host has an fqdn.
 mkdir -p /registry/{auth,certs,data}
 
-openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=dc2xcehaps001.cclu.sabiccorp.sabic.com" -out /registry/certs/domain.crt
+openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=util.ocp4.doitall.local" -out /registry/certs/domain.crt
 
 
 Add the certificate to your list of trusted certificates:
@@ -44,13 +44,13 @@ systemctl enable --now mirror-registry
 
 
 Confirm that the registry is available:
-curl -u admin:<Password> -k https://dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/v2/_catalog
+curl -u admin:<Password> -k https://util.ocp4.doitall.local:5000/v2/_catalog
 
 Creating Pull Secrets
 Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
 Pull Secret Bundle
 podman login --authfile /root/mirror-registry-pullsecret.json \
-"dc2xcehaps001.cclu.sabiccorp.sabic.com:5000"
+"util.ocp4.doitall.local:5000"
 
 /jq -s '{"auths": ( .[0].auths + .[1].auths ) }' /root/mirror-registry-pullsecret.json /root/pullsecret.txt > bundle-pullsecret.txt
 
@@ -67,7 +67,7 @@ Synchronizing the OpenShift Platform Container Images
 
 SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
 
-oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4 --to-release-image=dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4:4.6.42-x86_64
+oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=util.ocp4.doitall.local:5000/ocp4/openshift4 --to-release-image=util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64
 
 Synchronizing Operators (Step to be Done After Cluster Installation)
 
@@ -108,10 +108,10 @@ frontend openshift-api-server
 backend openshift-api-server
     balance source
     mode tcp
-    server bootstrap <BOOTSTRAP IP>:6443 check
-    server master001 <MASTER 1 IP>:6443 check
-    server master002 <MASTER 2 IP>:6443 check
-    server master003 <MASTER 3 IP>:6443 check
+    server bootstrap 192.168.22.200:6443 check
+    server master1 192.168.22.201:6443 check
+    server master2 192.168.22.202:6443 check
+    server master3 192.168.22.203:6443 check
  
 frontend machine-config-server
     bind *:22623
@@ -123,10 +123,10 @@ frontend machine-config-server
 backend machine-config-server
     balance source
     mode tcp
-    server bootstrap <BOOTSTRAP IP>:22623 check
-    server master001 <MASTER 1 IP>:22623 check
-    server master002 <MASTER 2 IP>:22623 check
-    server master003 <MASTER 3 IP>:22623 check
+    server bootstrap 192.168.22.200:6443 check
+    server master1 192.168.22.201:6443 check
+    server master2 192.168.22.202:6443 check
+    server master3 192.168.22.203:6443 check
 
 frontend ingress-http
     bind *:80
@@ -137,9 +137,8 @@ frontend ingress-http
 backend ingress-http
     balance source
     mode tcp
-    server worker001 <WORKER 1 IP>:80 check
-    server worker002 <WORKER 2 IP>:80 check
-    server worker003 <WORKER 3 IP>:80 check
+    server worker1 192.168.22.204:80 check
+    server worker2 192.168.22.205:80 check
 
 frontend ingress-https
     bind *:443
@@ -150,9 +149,8 @@ frontend ingress-https
 backend ingress-https
     balance source
     mode tcp
-    server worker001 <WORKER 1 IP>:443 check
-    server worker002 <WORKER 2 IP>:443 check
-    server worker003 <WORKER 3 IP>:443 check
+    server worker1 192.168.22.204:443 check
+    server worker2 192.168.22.205:443 check
 
 
 
@@ -173,7 +171,7 @@ export CLUSTER_NAME=<CLUSTER NAME>
 
 cat > /root/install-config.yaml << EOF
 apiVersion: v1
-baseDomain: sabiccorp.sabic.com
+baseDomain: doitall.local
 compute: 
 - name: worker
   replicas: 3
@@ -181,7 +179,7 @@ controlPlane:
   name: master
   replicas: 3
 metadata:
-  name: ${CLUSTER_NAME}
+  name: ocp4
 networking:
   clusterNetworks:
   - cidr: 10.128.0.0/14
@@ -197,10 +195,10 @@ sshKey: |
   ${SSH_KEY}
 imageContentSources:
 - mirrors:
-  - dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4
+  - util.ocp4.doitall.local:5000/ocp4/openshift4
   source: quay.io/openshift-release-dev/ocp-release
 - mirrors:
-  - dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4
+  - util.ocp4.doitall.local:5000/ocp4/openshift4
   source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
 additionalTrustBundle: |
 ${CERTIFICATE}
@@ -210,7 +208,7 @@ EOF
 
 
 Generating and Publishing ignition files
-oc adm release extract -a /root/bundle-pullsecret.txt --command=openshift-install "dc2xcehaps001.cclu.sabiccorp.sabic.com:5000/ocp4/openshift4:4.6.42-x86_64"
+oc adm release extract -a /root/bundle-pullsecret.txt --command=openshift-install "util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64"
 mv ./openshift-install /usr/local/bin/
 openshift-install version 
 
