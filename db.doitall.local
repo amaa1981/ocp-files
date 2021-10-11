@@ -1,0 +1,32 @@
+$TTL 1W
+@	IN	SOA	ns1.doitall.local.	root (
+			2019070700	; serial
+			3H		; refresh (3 hours)
+			30M		; retry (30 minutes)
+			2W		; expiry (2 weeks)
+			1W )		; minimum (1 week)
+	IN	NS	ns1.doitall.local.
+	IN	MX 10	smtp.doitall.local.
+;
+;
+ns1.doitall.local.		IN	A	192.168.22.1 
+smtp.doitall.local.		IN	A	192.168.22.1 
+;
+util.doitall.local.		IN	A	192.168.22.1 
+util.ocp4.doitall.local.	IN	A	192.168.22.1 
+;
+api.ocp4.doitall.local.		IN	A	192.168.22.1 
+api-int.ocp4.doitall.local.	IN	A	192.168.22.1 
+;
+*.apps.ocp4.doitall.local.	IN	A	192.168.22.1 
+;
+bootstrap.ocp4.doitall.local.	IN	A	192.168.22.200 
+;
+master1.ocp4.doitall.local.	IN	A	192.168.22.201 
+master2.ocp4.doitall.local.	IN	A	192.168.22.202 
+master3.ocp4.doitall.local.	IN	A	192.168.22.203 
+;
+worker1.ocp4.doitall.local.	IN	A	192.168.22.204 
+worker2.ocp4.doitall.local.	IN	A	192.168.22.205 
+;
+;EOF
