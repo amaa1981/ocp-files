@@ -1,22 +1,20 @@
 Step by Step
 Bastion Host
-Install packages on Bastion Host
+1. Install packages on Bastion Host
 
-yum -y install podman wget genisoimage bind-utils jq rsync httpd
+   yum -y install podman wget genisoimage bind-utils jq rsync httpd
 
-Configure Web Server
+2. Configure Web Server
 
-Apache HTTP Server will serve Ignition Files and OCP Artifacts during the Installation process.
-sed -i -e 's/Listen 80.*/Listen 8080/g' /etc/httpd/conf/httpd.conf
-mkdir /var/www/html/ocp4
-chmod a+r /var/www/html
-systemctl enable --now httpd
-systemctl status httpd
+   Apache HTTP Server will serve Ignition Files and OCP Artifacts during the Installation process.
+   # sed -i -e 's/Listen 80.*/Listen 8080/g' /etc/httpd/conf/httpd.conf
+   # mkdir /var/www/html/ocp4
+   # chmod a+r /var/www/html
+   # systemctl enable --now httpd
+   # systemctl status httpd
 
 Image Registry Installation
 In a restricted network installation, you can download the images that are required to install a cluster, place them in a mirror registry, and use that data to install your cluster.
-
-SABIC requested to have a single Container image Registry, a firewall rule must be created to allow connections from all the nodes from ClusterB to util.ocp4.doitall.local on port 5000/tcp.
 
 Make sure that the Bastion Host has an fqdn.
 mkdir -p /registry/{auth,certs,data}
@@ -81,84 +79,8 @@ setsebool -P haproxy_connect_any on
 
 We now need to configure it via /etc/haproxy/haproxy.cfg
 
-haproxy.cfg 
-defaults
-    mode                    http
-    log                     global
-    option                  httplog
-    option                  dontlognull
-    option forwardfor       except 127.0.0.0/8
-    option                  redispatch
-    retries                 3
-    timeout http-request    10s
-    timeout queue           1m
-    timeout connect         10s
-    timeout client          300s
-    timeout server          300s
-    timeout http-keep-alive 10s
-    timeout check           10s
-    maxconn                 20000
- 
-frontend openshift-api-server
-    bind *:6443
-    default_backend openshift-api-server
-    mode tcp
-    option tcplog
- 
-backend openshift-api-server
-    balance source
-    mode tcp
-    server bootstrap 192.168.22.200:6443 check
-    server master1 192.168.22.201:6443 check
-    server master2 192.168.22.202:6443 check
-    server master3 192.168.22.203:6443 check
- 
-frontend machine-config-server
-    bind *:22623
-    default_backend machine-config-server
-    mode tcp
-    option tcplog
-
-
-backend machine-config-server
-    balance source
-    mode tcp
-    server bootstrap 192.168.22.200:6443 check
-    server master1 192.168.22.201:6443 check
-    server master2 192.168.22.202:6443 check
-    server master3 192.168.22.203:6443 check
-
-frontend ingress-http
-    bind *:80
-    default_backend ingress-http
-    mode tcp
-    option tcplog
- 
-backend ingress-http
-    balance source
-    mode tcp
-    server worker1 192.168.22.204:80 check
-    server worker2 192.168.22.205:80 check
-
-frontend ingress-https
-    bind *:443
-    default_backend ingress-https
-    mode tcp
-    option tcplog
- 
-backend ingress-https
-    balance source
-    mode tcp
-    server worker1 192.168.22.204:443 check
-    server worker2 192.168.22.205:443 check
-
-
-
-
 We can now start the haproxy service.
 systemctl enable --now haproxy
-
-
 
 Creating install-config.yml file
 
