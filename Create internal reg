@@ -13,152 +13,123 @@ Bastion Host
    # systemctl enable --now httpd
    # systemctl status httpd
 
-Image Registry Installation
-In a restricted network installation, you can download the images that are required to install a cluster, place them in a mirror registry, and use that data to install your cluster.
+3. Image Registry Installation:
+   In a restricted network installation, you can download the images that are required to install a cluster, place them in a mirror registry, and use that data to install your cluster.
 
-Make sure that the Bastion Host has an fqdn.
-mkdir -p /registry/{auth,certs,data}
-
-openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=util.ocp4.doitall.local" -out /registry/certs/domain.crt
-
-
-Add the certificate to your list of trusted certificates:
-cp -rf /registry/certs/domain.crt /etc/pki/ca-trust/source/anchors/
-update-ca-trust
-
-Local Registry Username and Password
-
-Generate a username and a password for your registry that uses the bcrpt format:
-htpasswd -Bc /registry/auth/htpasswd admin
-
-Install and Start Local Registry Server
-podman pull quay.io/redhat-emea-ssa-team/registry:2
- 
-/usr/bin/podman run -d --name mirror-registry --net host -v /registry/data:/var/lib/registry:z -v /registry/auth:/auth:z -e "REGISTRY_AUTH=htpasswd" -e "REGISTRY_AUTH_HTPASSWD_REALM=registry-realm" -e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" -v /registry/certs:/certs:z -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key quay.io/redhat-emea-ssa-team/registry:2
-
-podman generate systemd --name mirror-registry > /etc/systemd/system/mirror-registry.service
-
-systemctl enable --now mirror-registry
+   Make sure that the Bastion Host has an fqdn.
+   # mkdir -p /registry/{auth,certs,data}
+   # openssl req -newkey rsa:4096 -nodes -sha256 -keyout /registry/certs/domain.key -x509 -days 365 -subj "/CN=util.ocp4.doitall.local" -out /registry/certs/domain.crt
 
 
-Confirm that the registry is available:
-curl -u admin:<Password> -k https://util.ocp4.doitall.local:5000/v2/_catalog
+   Add the certificate to your list of trusted certificates:
+   # cp -rf /registry/certs/domain.crt /etc/pki/ca-trust/source/anchors/
+   # update-ca-trust
 
-Creating Pull Secrets
-Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
-Pull Secret Bundle
-podman login --authfile /root/mirror-registry-pullsecret.json \
-"util.ocp4.doitall.local:5000"
+   Local Registry Username and Password
 
-/jq -s '{"auths": ( .[0].auths + .[1].auths ) }' /root/mirror-registry-pullsecret.json /root/pullsecret.txt > bundle-pullsecret.txt
+   Generate a username and a password for your registry that uses the bcrpt format:
+   # htpasswd -Bc /registry/auth/htpasswd admin
 
-Download OpenShift Artifacts
-mkdir /root/iso
-wget https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.6/latest/rhcos-4.6.40-x86_64-live.x86_64.iso -O /root/iso/rhcos-4.6.40-x86_64-live.x86_64.iso
+   Install and Start Local Registry Server
+   # podman pull quay.io/redhat-emea-ssa-team/registry:2
+   # podman run -d --name mirror-registry --net host -v /registry/data:/var/lib/registry:z -v /registry/auth:/auth:z -e "REGISTRY_AUTH=htpasswd" -e "REGISTRY_AUTH_HTPASSWD_REALM=registry-realm" -e "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd" -v /registry/certs:/certs:z -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key quay.io/redhat-emea-ssa-team/registry:2
+   # podman generate systemd --name mirror-registry > /etc/systemd/system/mirror-registry.service
+   # systemctl enable --now mirror-registry
 
-wget https://mirror.openshift.com/pub/openshift-v4/amd64/clients/ocp/latest-4.6/openshift-client-linux.tar.gz -O /root/openshift-client-linux.tar.gz
+   Confirm that the registry is available:
+   # curl -u admin:<Password> -k https://util.ocp4.doitall.local:5000/v2/_catalog
 
+   Creating Pull Secrets
+   Download your pull secret from the https://cloud.redhat.com/openshift/install/pull-secret site and save it on the file /root/pullsecret.txt
+   Pull Secret Bundle
+   # podman login --authfile /root/mirror-registry-pullsecret.json "util.ocp4.doitall.local:5000"
+   # /jq -s '{"auths": ( .[0].auths + .[1].auths ) }' /root/mirror-registry-pullsecret.json /root/pullsecret.txt > bundle-pullsecret.txt
 
-tar xzvf /root/openshift-client-linux.tar.gz -C /usr/local/bin
+4. Download OpenShift Artifacts
+   # mkdir /root/iso
+   # wget https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.6/latest/rhcos-4.6.40-x86_64-live.x86_64.iso -O /root/iso/rhcos-4.6.40-x86_64-live.x86_64.iso
+   # wget https://mirror.openshift.com/pub/openshift-v4/amd64/clients/ocp/latest-4.6/openshift-client-linux.tar.gz -O /root/openshift-client-linux.tar.gz
+   # tar xzvf /root/openshift-client-linux.tar.gz -C /usr/local/bin
 
-Synchronizing the OpenShift Platform Container Images
+5. Synchronizing the OpenShift Platform Container Images & Operators
+   # oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=util.ocp4.doitall.local:5000/ocp4/openshift4 --to-release-image=util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64
 
-SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
+   Synchronizing Operators (Step to be Done After Cluster Installation)
 
-oc adm -a /root/bundle-pullsecret.txt release mirror --from=quay.io/openshift-release-dev/ocp-release:4.6.42-x86_64 --to=util.ocp4.doitall.local:5000/ocp4/openshift4 --to-release-image=util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64
+6. Configuring the Load Balancers
+   # yum install haproxy
+   We now need to configure it via /etc/haproxy/haproxy.cfg
+   # setsebool -P haproxy_connect_any on
+   # systemctl enable --now haproxy
+   # systemctl start haproxy
 
-Synchronizing Operators (Step to be Done After Cluster Installation)
+7. Creating install-config.yml file
+   # ssh-keygen
+   # export PULL_SECRET=$(cat /root/bundle-pullsecret.txt | jq -c)
+   # export SSH_KEY=$(cat $HOME/.ssh/id_rsa.pub)
+   # export CERTIFICATE=$(cat /registry/certs/domain.crt | sed -e 's/^/     /')
+   # export CLUSTER_NAME=<CLUSTER NAME>
+   # cat > /root/install-config.yaml << EOF
+      apiVersion: v1
+      baseDomain: doitall.local
+      compute: 
+      - name: worker
+        replicas: 3
+      controlPlane:
+        name: master
+        replicas: 3
+      metadata:
+        name: ocp4
+      networking:
+        clusterNetworks:
+        - cidr: 10.128.0.0/14
+          hostPrefix: 23
+        networkType: OpenShiftSDN
+        serviceNetwork:
+        - 172.30.0.0/16
+      platform:
+        none: {}
+      pullSecret: |
+        ${PULL_SECRET}
+      sshKey: |
+        ${SSH_KEY}
+      imageContentSources:
+      - mirrors:
+        - util.ocp4.doitall.local:5000/ocp4/openshift4
+        source: quay.io/openshift-release-dev/ocp-release
+      - mirrors:
+        - util.ocp4.doitall.local:5000/ocp4/openshift4
+        source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+      additionalTrustBundle: |
+      ${CERTIFICATE}
+      EOF
 
-SABIC Internet bandwidth can cause problems during the synchronization of the images, if you find eros please restart the sync process.
+8. Generating and Publishing ignition files
+   # oc adm release extract -a /root/bundle-pullsecret.txt --command=openshift-install "util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64"
+   # mv ./openshift-install /usr/local/bin/
+   # openshift-install version 
+   # mkdir ocp4
+   # cp -rf install-config.yaml ocp4/install-config.yaml
+   # openshift-install create ignition-configs --dir=ocp4
+   # cp -rf ocp4/*.ign /var/www/html/ocp4/
+   # chmod -R a+rx /var/www/html/
 
-Please follow the official documentation
-Configuring the Load Balancers
-yum install haproxy
-setsebool -P haproxy_connect_any on
+9. Customizing RHCOS ISO Image
+   Let's mount the iso and extract out the content. On a Linux shell.
+   NOTE: Replace X ( In Red ) with the name or any unique identifier of the cluster. 
+   E.g: clusterA or clusterB
 
+   Mounting and copying the iso content
+   # mkdir /mnt/iso
+   # mkdir -p /root/clusterX-customized
+   # mount -o /root/iso/rhcos-4.6.40-x86_64-live.x86_64.iso /mnt/iso
+   # cp -r /mnt/iso/* /root/clusterX-customized
+   # umount /mnt/iso/
 
-We now need to configure it via /etc/haproxy/haproxy.cfg
-
-We can now start the haproxy service.
-systemctl enable --now haproxy
-
-Creating install-config.yml file
-
-ssh-keygen
- 
-export PULL_SECRET=$(cat /root/bundle-pullsecret.txt | jq -c)
-export SSH_KEY=$(cat $HOME/.ssh/id_rsa.pub)
-export CERTIFICATE=$(cat /registry/certs/domain.crt | sed -e 's/^/     /')
-export CLUSTER_NAME=<CLUSTER NAME>
-
-cat > /root/install-config.yaml << EOF
-apiVersion: v1
-baseDomain: doitall.local
-compute: 
-- name: worker
-  replicas: 3
-controlPlane:
-  name: master
-  replicas: 3
-metadata:
-  name: ocp4
-networking:
-  clusterNetworks:
-  - cidr: 10.128.0.0/14
-    hostPrefix: 23
-  networkType: OpenShiftSDN
-  serviceNetwork:
-  - 172.30.0.0/16
-platform:
-  none: {}
-pullSecret: |
-  ${PULL_SECRET}
-sshKey: |
-  ${SSH_KEY}
-imageContentSources:
-- mirrors:
-  - util.ocp4.doitall.local:5000/ocp4/openshift4
-  source: quay.io/openshift-release-dev/ocp-release
-- mirrors:
-  - util.ocp4.doitall.local:5000/ocp4/openshift4
-  source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
-additionalTrustBundle: |
-${CERTIFICATE}
-EOF
-
-
-
-
-Generating and Publishing ignition files
-oc adm release extract -a /root/bundle-pullsecret.txt --command=openshift-install "util.ocp4.doitall.local:5000/ocp4/openshift4:4.6.42-x86_64"
-mv ./openshift-install /usr/local/bin/
-openshift-install version 
-
-mkdir ocp4
-cp -rf install-config.yaml ocp4/install-config.yaml
-openshift-install create ignition-configs --dir=ocp4
-cp -rf ocp4/*.ign /var/www/html/ocp4/
-chmod -R a+rx /var/www/html/
-
-Customizing RHCOS ISO Image
-Let's mount the iso and extract out the content. On a Linux shell.
-
-NOTE: Replace X ( In Red ) with the name or any unique identifier of the cluster. 
-E.g: clusterA or clusterB
-
-Mounting and copying the iso content
-mkdir /mnt/iso
-mkdir -p /root/clusterX-customized
-mount -o /root/iso/rhcos-4.6.40-x86_64-live.x86_64.iso /mnt/iso
-cp -r /mnt/iso/* /root/clusterX-customized
-umount /mnt/iso/
-
-
-The files for Cluster A were sent by email - isolinux.cfg and grub.cfg, you will have to copy it to bastion host on /root 
-
-Copying the customized files into the clusterX-customized folder.
-cp /root/isolinux.cfg /root/clusterX-customized/isolinux/isolinux.cfg
-cp /root/grub.cfg /root/clusterX-customized/EFI/redhat/grub.cfg
+   The files for Cluster A were sent by email - isolinux.cfg and grub.cfg, you will have to copy it to bastion host on /root 
+   Copying the customized files into the clusterX-customized folder.
+   # cp /root/isolinux.cfg /root/clusterX-customized/isolinux/isolinux.cfg
+   # cp /root/grub.cfg /root/clusterX-customized/EFI/redhat/grub.cfg
 
 
 Re-pack Iso image
